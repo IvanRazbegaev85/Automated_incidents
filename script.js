@@ -56,17 +56,21 @@ const incident ={
         switch (true) {
             case node == 1:
                 incident.getInfluxShit(incident.url+incident.influxQueryNode1);
+                incident.incidents = [];
                 break;
             case node == 2:
                 incident.getInfluxShit(incident.url+incident.influxQueryNode2);
+                incident.incidents = [];
                 break;
             case node == 3:
                 incident.getInfluxShit(incident.url+incident.influxQueryNode3);
+                incident.incidents = [];
                 break;
             default:
                 incident.getInfluxShit(incident.url+incident.influxQueryNode1);
                 incident.getInfluxShit(incident.url+incident.influxQueryNode2);
                 incident.getInfluxShit(incident.url+incident.influxQueryNode3);
+                incident.incidents = [];
         }
     },
     showResults: function (){
