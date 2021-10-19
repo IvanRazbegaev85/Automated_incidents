@@ -1,7 +1,6 @@
 
 const incident ={
     dataArray: {},
-    button: document.querySelector("button"),
     url: "https://influxapi.egamings.com/query?q=",
     influxQueryNode1:`SELECT host, last(mr_req_time_in_system) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb1-4' AND time >= (now()-24h) AND time < (now()) GROUP BY (time(60s))`,
     influxQueryNode2:`SELECT host, last(mr_req_time_in_system2) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb2-4' AND time >= (now()-24h) AND time < (now()) GROUP BY (time(60s))`,
@@ -9,21 +8,36 @@ const incident ={
     incidents: [],
 
     init: function () {
-        this.incidents = [];
-        this.button.addEventListener("click",incident.start);
+        const nodeOneBtn = document.getElementById("node-one");
+        const nodeTwoBtn = document.getElementById("node-two");
+        const nodeThreeBtn = document.getElementById("node-three");
+        const allNodesBtn = document.getElementById("all-nodes");
+
+        nodeOneBtn.addEventListener('click', function () {
+            incident.start(1);
+        });
+        nodeTwoBtn.addEventListener('click', function () {
+            incident.start(2);
+        });
+        nodeThreeBtn.addEventListener('click', function () {
+            incident.start(3);
+        });
+        allNodesBtn.addEventListener('click', function () {
+            incident.start();
+        });
     },
 
-    start: function () {
-        incident.getInfluxShit();
+    start: function (node = 'all') {
+        incident.nodeIncidents(node);
     },
 
-    getInfluxShit: function (){
-        fetch(incident.url+incident.influxQueryNode1).then( function(response) {
+    getInfluxShit: function (query){
+
+        fetch(query).then( function(response) {
             return response.json();
         }).then(function(data) {
             incident.dataArray = data.results[0].series[0];
             incident.getIncidents();
-            incident.showResults();
         }).catch(function() {
             console.log("Booo");
         });
@@ -38,7 +52,23 @@ const incident ={
         }
         console.dir(incident.incidents);
     },
-
+    nodeIncidents: function (node = "all") {
+        switch (true) {
+            case node == 1:
+                incident.getInfluxShit(incident.url+incident.influxQueryNode1);
+                break;
+            case node == 2:
+                incident.getInfluxShit(incident.url+incident.influxQueryNode2);
+                break;
+            case node == 3:
+                incident.getInfluxShit(incident.url+incident.influxQueryNode3);
+                break;
+            default:
+                incident.getInfluxShit(incident.url+incident.influxQueryNode1);
+                incident.getInfluxShit(incident.url+incident.influxQueryNode2);
+                incident.getInfluxShit(incident.url+incident.influxQueryNode3);
+        }
+    },
     showResults: function (){
 
     }
