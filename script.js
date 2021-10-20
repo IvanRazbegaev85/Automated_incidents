@@ -13,41 +13,45 @@ const incident ={
         const nodeThreeBtn = document.getElementById("node-three");
         const allNodesBtn = document.getElementById("all-nodes");
 
-        nodeOneBtn.addEventListener('click', function () {
-            incident.start(1);
+        nodeOneBtn.addEventListener('click',  () => {
+            this.start(1);
         });
-        nodeTwoBtn.addEventListener('click', function () {
-            incident.start(2);
+        nodeTwoBtn.addEventListener('click', () => {
+            this.start(2);
         });
-        nodeThreeBtn.addEventListener('click', function () {
-            incident.start(3);
+        nodeThreeBtn.addEventListener('click', () => {
+            this.start(3);
         });
-        allNodesBtn.addEventListener('click', function () {
-            incident.start();
+        allNodesBtn.addEventListener('click',  () => {
+            this.start();
         });
     },
 
     start: function (node = 'all') {
-        incident.nodeIncidents(node);
+        this.nodeIncidents(node);
     },
 
     getInfluxShit: function (query){
 
-        fetch(query).then( function(response) {
+        fetch(query).then( (response) => {
             return response.json();
-        }).then(function(data) {
-            incident.dataArray = data.results[0].series[0];
-            incident.getIncidents();
-        }).catch(function() {
-            console.log("Booo");
+        }).then((data) => {
+            this.dataArray = data.results[0].series[0];
+            this.getIncidents();
+        }).catch(() => {
+            console.log("Something went wrong. Use console.dir to look for result of request");
         });
     },
 
     getIncidents: function (){
         const incidentTime = 0.15;
-        for (let i = 0; i < incident.dataArray.values.length; i++){
-            if (+incident.dataArray.values[i][2] > +incidentTime){
-                incident.incidents.push({time: incident.dataArray.values[i][0], host: incident.dataArray.values[i][1], resp_time:incident.dataArray.values[i][2]});
+        for (let i = 0; i < this.dataArray.values.length; i++){
+            if (+this.dataArray.values[i][2] > +incidentTime){
+                this.incidents.push({time: this.dataArray.values[i][0],
+                    host: this.dataArray.values[i][1],
+                    resp_time:this.dataArray.values[i][2],
+                    pinup: false
+                });
             } else continue;
         }
         console.dir(incident.incidents);
@@ -55,22 +59,22 @@ const incident ={
     nodeIncidents: function (node = "all") {
         switch (true) {
             case node == 1:
-                incident.getInfluxShit(incident.url+incident.influxQueryNode1);
-                incident.incidents = [];
+                this.getInfluxShit(this.url+this.influxQueryNode1);
+                this.incidents = [];
                 break;
             case node == 2:
-                incident.getInfluxShit(incident.url+incident.influxQueryNode2);
-                incident.incidents = [];
+                this.getInfluxShit(this.url+this.influxQueryNode2);
+                this.incidents = [];
                 break;
             case node == 3:
-                incident.getInfluxShit(incident.url+incident.influxQueryNode3);
-                incident.incidents = [];
+                this.getInfluxShit(this.url+this.influxQueryNode3);
+                this.incidents = [];
                 break;
             default:
-                incident.getInfluxShit(incident.url+incident.influxQueryNode1);
-                incident.getInfluxShit(incident.url+incident.influxQueryNode2);
-                incident.getInfluxShit(incident.url+incident.influxQueryNode3);
-                incident.incidents = [];
+                this.getInfluxShit(this.url+this.influxQueryNode1);
+                this.getInfluxShit(this.url+this.influxQueryNode2);
+                this.getInfluxShit(this.url+this.influxQueryNode3);
+                this.incidents = [];
         }
     },
     showResults: function (){
