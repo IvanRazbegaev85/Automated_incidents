@@ -56,9 +56,16 @@ const incident ={
         const incidentTime = 0.15;
         this.dataArray.forEach((value, index) => {
             if (+this.dataArray[index][2] > +incidentTime){
+                let node ='';
+                if (this.dataArray[index][1] === 'site2-deac-loggingdb1-4'){
+                    node = "1ая нода"
+                } else if (this.dataArray[index][1] === 'site2-deac-loggingdb2-4') {
+                    node = "2ая нода";
+                } else {node = "3яя нода"};
+
                 this.incidents.push({
                     time: this.dataArray[index][0],
-                    host: this.dataArray[index][1],
+                    host: node,
                     resp_time:this.dataArray[index][2],
                     pinup: false
                 });
