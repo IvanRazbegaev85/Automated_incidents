@@ -5,7 +5,7 @@ const nodeThreeBtn = document.getElementById("node-three");
 const allNodesBtn = document.getElementById("all-nodes");
 
 const incident ={
-    dataArray: {},
+    dataArray: [],
     url: "https://influxapi.egamings.com/query?q=",
     influxQueryNode1:`SELECT host, last(mr_req_time_in_system) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb1-4' AND time >= (now()-24h) AND time < (now()) GROUP BY (time(60s))`,
     influxQueryNode2:`SELECT host, last(mr_req_time_in_system2) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb2-4' AND time >= (now()-24h) AND time < (now()) GROUP BY (time(60s))`,
@@ -39,11 +39,14 @@ const incident ={
         fetch(query).then( (response) => {
             return response.json();
         }).then((data) => {
-            // this.dataArray = data.results[0].series[0];
-            let newArray = JSON.stringify(data.results[0].series[0].values);
-            console.log(newArray);
+            data.results[0].series[0].values.forEach(value => {
+                this.dataArray.push(value);
+            });
+            console.log(this.dataArray)
             setTimeout(() => this.getIncidents(),0);
-            this.logger()
+            setTimeout(() => this.renderTable(),0);
+            setTimeout(() => this.incidents =[],0);
+            setTimeout(() => this.dataArray =[],0);
         }).catch((e) => {
             console.log("Something went wrong. Use console.dir to look for result of request", e);
         });
@@ -51,16 +54,18 @@ const incident ={
 
     getIncidents: function (){
         const incidentTime = 0.15;
-        for (let i = 0; i < this.dataArray.values.length; i++){
-            if (+this.dataArray.values[i][2] > +incidentTime){
+        this.dataArray.forEach((value, index) => {
+            if (+this.dataArray[index][2] > +incidentTime){
                 this.incidents.push({
-                    time: this.dataArray.values[i][0],
-                    host: this.dataArray.values[i][1],
-                    resp_time:this.dataArray.values[i][2],
+                    time: this.dataArray[index][0],
+                    host: this.dataArray[index][1],
+                    resp_time:this.dataArray[index][2],
                     pinup: false
                 });
             }
-        }
+        })
+
+        this.logger();
     },
     nodeIncidents: function (node = "all") {
         switch (true) {
@@ -89,7 +94,7 @@ const incident ={
         this.incidents.forEach(value => {
             let tr = document.createElement("tr");
             tr.innerHTML =
-            '<td>' + value.time.toLocaleString("ru") + '</td>' +
+            '<td>' + new Date(value.time).toLocaleString("ru") + '</td>' +
             '<td>' + value.host + '</td>' +
             '<td>' + value.resp_time.toFixed(2) + '</td>' +
             '<td>' + value.pinup.toString() + '</td>';
