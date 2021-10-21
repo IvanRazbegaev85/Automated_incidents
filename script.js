@@ -3,6 +3,9 @@ const nodeOneBtn = document.getElementById("node-one");
 const nodeTwoBtn = document.getElementById("node-two");
 const nodeThreeBtn = document.getElementById("node-three");
 const allNodesBtn = document.getElementById("all-nodes");
+const incidentsBtn = document.querySelector(".dropbtn");
+const resetBtn = document.getElementById("cancelbtn");
+let tableContent = document.querySelectorAll("td");
 
 const parseIncidents = {
     dataArray: [],
@@ -81,6 +84,14 @@ const render ={
             incidentsTable.append(tr);
         })
     },
+    resetTable: function () {
+        tableContent = document.querySelectorAll("td");
+        parseIncidents.incidents = [];
+        parseIncidents.dataArray = [];
+        tableContent.forEach(value => value.remove());
+        incidentsBtn.style.display = 'block';
+        resetBtn.style.display = 'none';
+    }
 }
 
 const incident ={
@@ -89,26 +100,35 @@ const incident ={
 
         nodeOneBtn.addEventListener('click',  () => {
             this.start(1);
+            incidentsBtn.style.display = 'none';
+            resetBtn.style.display = 'block';
         });
         nodeTwoBtn.addEventListener('click', () => {
             this.start(2);
+            incidentsBtn.style.display = 'none';
+            resetBtn.style.display = 'block';
         });
         nodeThreeBtn.addEventListener('click', () => {
             this.start(3);
+            incidentsBtn.style.display = 'none';
+            resetBtn.style.display = 'block';
         });
         allNodesBtn.addEventListener('click',  () => {
             this.start();
+            incidentsBtn.style.display = 'none';
+            resetBtn.style.display = 'block';
         });
+        resetBtn.addEventListener('click', render.resetTable);
     },
 
     start: function (node = 'all') {
         parseIncidents.nodeIncidents(node);
         render.renderTable();
-        parseIncidents.incidents =[];
     },
 }
 /*
-TODO Разделить проект на отдельные объекты - получение инфы с инфлюкса и прометиуса, работа с инцидентами, отрисовка таблицы,
- в глобальные переменные вынести получение элементов с html
+TODO Добавить текстовый инпут на страницу, передавать его в цикл перебора значений в dataArray как сравнение с resp_time,
+TODO получить данные из прометиуса по пинапу и править флаг "pinup"
+TODO Обработчик кнопки "reset" + метод сброса в рендере
  */
 incident.init();
