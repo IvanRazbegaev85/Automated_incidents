@@ -4,35 +4,13 @@ const nodeTwoBtn = document.getElementById("node-two");
 const nodeThreeBtn = document.getElementById("node-three");
 const allNodesBtn = document.getElementById("all-nodes");
 
-const incident ={
+const parseIncidents = {
     dataArray: [],
+    incidents: [],
     url: "https://influxapi.egamings.com/query?q=",
     influxQueryNode1:`SELECT host, last(mr_req_time_in_system) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb1-4' AND time >= (now()-24h) AND time < (now()) GROUP BY (time(60s))`,
     influxQueryNode2:`SELECT host, last(mr_req_time_in_system2) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb2-4' AND time >= (now()-24h) AND time < (now()) GROUP BY (time(60s))`,
     influxQueryNode3:`SELECT host, last(mr_req_time_in_system3) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site1-telia-loggingdb3-4' AND time >= (now()-24h) AND time < (now()) GROUP BY (time(60s))`,
-    incidents: [],
-
-    init: function () {
-
-        nodeOneBtn.addEventListener('click',  () => {
-            this.start(1);
-        });
-        nodeTwoBtn.addEventListener('click', () => {
-            this.start(2);
-        });
-        nodeThreeBtn.addEventListener('click', () => {
-            this.start(3);
-        });
-        allNodesBtn.addEventListener('click',  () => {
-            this.start();
-        });
-    },
-
-    start: function (node = 'all') {
-        this.nodeIncidents(node);
-        this.renderTable();
-        this.incidents =[];
-    },
 
     getInfluxShit: function (query){
 
@@ -44,35 +22,12 @@ const incident ={
             });
             console.log(this.dataArray)
             setTimeout(() => this.getIncidents(),0);
-            setTimeout(() => this.renderTable(),0);
+            setTimeout(() => render.renderTable(),0);
             setTimeout(() => this.incidents =[],0);
             setTimeout(() => this.dataArray =[],0);
         }).catch((e) => {
             console.log("Something went wrong. Use console.dir to look for result of request", e);
         });
-    },
-
-    getIncidents: function (){
-        const incidentTime = 0.15;
-        this.dataArray.forEach((value, index) => {
-            if (+this.dataArray[index][2] > +incidentTime){
-                let node ='';
-                if (this.dataArray[index][1] === 'site2-deac-loggingdb1-4'){
-                    node = "1ая нода"
-                } else if (this.dataArray[index][1] === 'site2-deac-loggingdb2-4') {
-                    node = "2ая нода";
-                } else {node = "3яя нода"};
-
-                this.incidents.push({
-                    time: this.dataArray[index][0],
-                    host: node,
-                    resp_time:this.dataArray[index][2],
-                    pinup: false
-                });
-            }
-        })
-
-        this.logger();
     },
     nodeIncidents: function (node = "all") {
         switch (true) {
@@ -92,22 +47,68 @@ const incident ={
                 break;
         }
     },
-    logger: function (){
-        console.log(this.incidents)
-    },
+    getIncidents: function (){
+        const incidentTime = 0.15;
+        this.dataArray.forEach((value, index) => {
+            if (+this.dataArray[index][2] > +incidentTime){
+                let node ='';
+                if (this.dataArray[index][1] === 'site2-deac-loggingdb1-4'){
+                    node = "1ая нода"
+                } else if (this.dataArray[index][1] === 'site2-deac-loggingdb2-4') {
+                    node = "2ая нода";
+                } else {node = "3яя нода"};
 
+                this.incidents.push({
+                    time: this.dataArray[index][0],
+                    host: node,
+                    resp_time:this.dataArray[index][2],
+                    pinup: false
+                });
+            }
+        })
+    },
+}
+
+const render ={
     renderTable: function () {
-      //TODO Создание таблицы на основе HTML элементов
-        this.incidents.forEach(value => {
+        parseIncidents.incidents.forEach(value => {
             let tr = document.createElement("tr");
             tr.innerHTML =
-            '<td>' + new Date(value.time).toLocaleString("ru") + '</td>' +
-            '<td>' + value.host + '</td>' +
-            '<td>' + value.resp_time.toFixed(2) + '</td>' +
-            '<td>' + value.pinup.toString() + '</td>';
+                '<td>' + new Date(value.time).toLocaleString("ru") + '</td>' +
+                '<td>' + value.host + '</td>' +
+                '<td>' + value.resp_time.toFixed(2) + '</td>' +
+                '<td>' + value.pinup.toString() + '</td>';
             incidentsTable.append(tr);
         })
     },
 }
 
+const incident ={
+
+    init: function () {
+
+        nodeOneBtn.addEventListener('click',  () => {
+            this.start(1);
+        });
+        nodeTwoBtn.addEventListener('click', () => {
+            this.start(2);
+        });
+        nodeThreeBtn.addEventListener('click', () => {
+            this.start(3);
+        });
+        allNodesBtn.addEventListener('click',  () => {
+            this.start();
+        });
+    },
+
+    start: function (node = 'all') {
+        parseIncidents.nodeIncidents(node);
+        render.renderTable();
+        parseIncidents.incidents =[];
+    },
+}
+/*
+TODO Разделить проект на отдельные объекты - получение инфы с инфлюкса и прометиуса, работа с инцидентами, отрисовка таблицы,
+ в глобальные переменные вынести получение элементов с html
+ */
 incident.init();
