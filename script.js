@@ -41,15 +41,22 @@ const parseIncidents = {
 
         dateFrom = document.querySelector("#date-time-start");
         dateTo = document.querySelector("#date-time-end");
-        const dateToUTC = `${new Date(Date.parse(`${dateTo.value}:00Z`) - 10800000).toISOString().slice(0,-5)}Z`;
-        const dateFromUTC = `${new Date(Date.parse(`${dateFrom.value}:00Z`) - 10800000).toISOString().slice(0,-5)}Z`;
+
+        if (Date.parse(`${dateTo.value}:00Z`) < Date.parse(`${dateFrom.value}:00Z`)){
+            alert(`Date-time in "From" field can't be more that in "To" field!`);
+            return false;
+        };
+        // Здесь творится магия. Нельзя просто так уменьшить полученное время из инпута и отправить его в инфлюкс - инфлюкс принимает дату-время в utc
+        // А из инпута мы получаем локальное время, поэтому при отправке мы получим ошибку
+        const dateToUTC = `${new Date(Date.parse(`${dateTo.value}:00Z`) - 10800000).toISOString().slice(0, -5)}Z`;
+        const dateFromUTC = `${new Date(Date.parse(`${dateFrom.value}:00Z`) - 10800000).toISOString().slice(0, -5)}Z`;
 
         this.influxQueryNode1 = `SELECT host, last(mr_req_time_in_system) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb1-4' AND time >= '${dateFromUTC}' AND time < '${dateToUTC}' GROUP BY (time(60s))`;
         this.influxQueryNode2 = `SELECT host, last(mr_req_time_in_system2) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb2-4' AND time >= '${dateFromUTC}' AND time < '${dateToUTC}' GROUP BY (time(60s))`;
         this.influxQueryNode3 = `SELECT host, last(mr_req_time_in_system3) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site1-telia-loggingdb3-4' AND time >= '${dateFromUTC}' AND time < '${dateToUTC}' GROUP BY (time(60s))`;
 
         // В зависимости от node формируем разные запросы и передаем их аргументом в getInfluxShit
-        switch (true) {
+        switch ((Date.parse(`${dateFrom.value}:00Z`) < Date.parse(`${dateTo.value}:00Z`))) {
             case node == 1:
                 this.getInfluxShit(this.url+this.influxQueryNode1);
                 break;
@@ -59,7 +66,7 @@ const parseIncidents = {
             case node == 3:
                 this.getInfluxShit(this.url+this.influxQueryNode3);
                 break;
-            default:
+            case node == 'all':
                 this.getInfluxShit(this.url+this.influxQueryNode1);
                 this.getInfluxShit(this.url+this.influxQueryNode2);
                 this.getInfluxShit(this.url+this.influxQueryNode3);
@@ -68,7 +75,14 @@ const parseIncidents = {
     },
     getIncidents: function (){
         incidentThreshold = document.querySelector("#response_time");
-        const incidentTime = incidentThreshold.value/1000;
+        let incidentTime = incidentThreshold.value.trim();
+        if (this.isNumber(incidentThreshold.value)){
+            incidentTime = incidentThreshold.value/1000;
+        } else {
+            alert("Please enter a valid threshold");
+            return false;
+        }
+
         // Перебираем dataArray и сравниваем с порогом инцидентов IncidentTime
         this.dataArray.forEach((value, index) => {
             if (+this.dataArray[index][2] > +incidentTime){
@@ -88,6 +102,10 @@ const parseIncidents = {
             }
         })
     },
+
+    isNumber: function (number) {
+        return !isNaN(parseFloat(number)) && isFinite(number)
+    }
 }
 
 const render ={
