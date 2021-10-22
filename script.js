@@ -6,14 +6,17 @@ const allNodesBtn = document.getElementById("all-nodes");
 const incidentsBtn = document.querySelector(".dropbtn");
 const resetBtn = document.getElementById("cancelbtn");
 let tableContent = document.querySelectorAll("td");
+let incidentThreshold = document.querySelector("#response_time");
+let dateFrom = document.querySelector("#date-time-start");
+let dateTo = document.querySelector("#date-time-end");
 
 const parseIncidents = {
     dataArray: [],
     incidents: [],
     url: "https://influxapi.egamings.com/query?q=",
-    influxQueryNode1:`SELECT host, last(mr_req_time_in_system) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb1-4' AND time >= (now()-24h) AND time < (now()) GROUP BY (time(60s))`,
-    influxQueryNode2:`SELECT host, last(mr_req_time_in_system2) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb2-4' AND time >= (now()-24h) AND time < (now()) GROUP BY (time(60s))`,
-    influxQueryNode3:`SELECT host, last(mr_req_time_in_system3) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site1-telia-loggingdb3-4' AND time >= (now()-24h) AND time < (now()) GROUP BY (time(60s))`,
+    influxQueryNode1:'',
+    influxQueryNode2:'',
+    influxQueryNode3:'',
 
     getInfluxShit: function (query){
         // Отправляем запрос, получаем данные из инфлюкс и складываем в dataArray
@@ -35,6 +38,16 @@ const parseIncidents = {
         });
     },
     nodeIncidents: function (node = "all") {
+
+        dateFrom = document.querySelector("#date-time-start");
+        dateTo = document.querySelector("#date-time-end");
+        const dateToUTC = `${new Date(Date.parse(`${dateTo.value}:00Z`) - 10800000).toISOString().slice(0,-5)}Z`;
+        const dateFromUTC = `${new Date(Date.parse(`${dateFrom.value}:00Z`) - 10800000).toISOString().slice(0,-5)}Z`;
+
+        this.influxQueryNode1 = `SELECT host, last(mr_req_time_in_system) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb1-4' AND time >= '${dateFromUTC}' AND time < '${dateToUTC}' GROUP BY (time(60s))`;
+        this.influxQueryNode2 = `SELECT host, last(mr_req_time_in_system2) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb2-4' AND time >= '${dateFromUTC}' AND time < '${dateToUTC}' GROUP BY (time(60s))`;
+        this.influxQueryNode3 = `SELECT host, last(mr_req_time_in_system3) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site1-telia-loggingdb3-4' AND time >= '$${dateFromUTC}' AND time < '${dateToUTC}' GROUP BY (time(60s))`;
+
         // В зависимости от node формируем разные запросы и передаем их аргументом в getInfluxShit
         switch (true) {
             case node == 1:
@@ -54,8 +67,8 @@ const parseIncidents = {
         }
     },
     getIncidents: function (){
-        const incidentTime = 0.15;
-
+        incidentThreshold = document.querySelector("#response_time");
+        const incidentTime = incidentThreshold.value/1000;
         // Перебираем dataArray и сравниваем с порогом инцидентов IncidentTime
         this.dataArray.forEach((value, index) => {
             if (+this.dataArray[index][2] > +incidentTime){
