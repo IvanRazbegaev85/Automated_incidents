@@ -155,6 +155,13 @@ const incident ={
             resetBtn.style.display = 'block';
         });
         resetBtn.addEventListener('click', render.resetTable);
+        window.addEventListener('load',() => {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            dateTo.value = now.toISOString().slice(0, -8);
+            now.setDate(now.getDate() - 1);
+            dateFrom.value = now.toISOString().slice(0, -8);
+        });
     },
 
     start: function (node = 'all') {
