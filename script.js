@@ -46,7 +46,7 @@ const parseIncidents = {
 
         this.influxQueryNode1 = `SELECT host, last(mr_req_time_in_system) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb1-4' AND time >= '${dateFromUTC}' AND time < '${dateToUTC}' GROUP BY (time(60s))`;
         this.influxQueryNode2 = `SELECT host, last(mr_req_time_in_system2) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site2-deac-loggingdb2-4' AND time >= '${dateFromUTC}' AND time < '${dateToUTC}' GROUP BY (time(60s))`;
-        this.influxQueryNode3 = `SELECT host, last(mr_req_time_in_system3) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site1-telia-loggingdb3-4' AND time >= '$${dateFromUTC}' AND time < '${dateToUTC}' GROUP BY (time(60s))`;
+        this.influxQueryNode3 = `SELECT host, last(mr_req_time_in_system3) as "time without sub_time" FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='site1-telia-loggingdb3-4' AND time >= '${dateFromUTC}' AND time < '${dateToUTC}' GROUP BY (time(60s))`;
 
         // В зависимости от node формируем разные запросы и передаем их аргументом в getInfluxShit
         switch (true) {
