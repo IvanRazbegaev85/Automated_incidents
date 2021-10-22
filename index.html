@@ -10,6 +10,20 @@
     <link rel="stylesheet" type="text/css" href="./scss.css">
 </head>
 <body>
+<form>
+    <label for="response_time">Enter the incident threshold</label><br>
+    <input type="text" id="response_time" value="150"><simple>milliseconds</simple>
+</form>
+<br>
+<form>
+    <label for="date-time-start">Search for incidents from:</label><br>
+    <input type="datetime-local" id="date-time-start"> <br>
+    <label for="date-time-end">to:</label><br>
+    <input type="datetime-local" id="date-time-end">
+</form>
+<!--TODO: Вставить блоком инпут для ввода времени ответа, добавить в него default value + placeholder -->
+<!--TODO: Вставить блоком дата пикер, добавить в него default value - последние сутки -->
+<br>
 <div class="dropdown">
     <button class="dropbtn">Get those incidents here!</button>
     <div class="dropdown-content">
