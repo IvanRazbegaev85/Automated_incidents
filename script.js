@@ -1,3 +1,5 @@
+'use strict'
+
 const incidentsTable = document.getElementById("customers");
 const nodeOneBtn = document.getElementById("node-one");
 const nodeTwoBtn = document.getElementById("node-two");
@@ -13,6 +15,7 @@ let dateTo = document.querySelector("#date-time-end");
 const parseIncidents = {
     dataArray: [],
     incidents: [],
+    pinupIdleFpm: [],
     url: "https://influxapi.egamings.com/query?q=",
     influxQueryNode1:'',
     influxQueryNode2:'',
@@ -28,11 +31,13 @@ const parseIncidents = {
             });
             // Запускаем обработку инцидентов
             this.getIncidents();
+            this.wasItPinup();
+            console.log(this.incidents);
+            setTimeout(() => render.renderTable(),0);
             // Далее - рендерим полученные данные
-            render.renderTable();
             // Обнуляем массивы, чтобы не было накопления данных и их задвоения/троения
-            this.incidents =[];
-            this.dataArray =[];
+            setTimeout(() => this.incidents =[],0);
+            setTimeout(() => this.dataArray =[],0);
         }).catch((e) => {
             console.log("Something went wrong. Use console.dir to look for result of request", e);
         });
@@ -97,26 +102,47 @@ const parseIncidents = {
                     time: this.dataArray[index][0],
                     host: node,
                     resp_time:this.dataArray[index][2],
-                    pinup: false
+                    pinup: ''
                 });
             }
-        })
+
+        });
     },
 
     isNumber: function (number) {
         return !isNaN(parseFloat(number)) && isFinite(number)
+    },
+    wasItPinup: function () {
+        this.incidents.forEach((value,index) => {
+            let datum = (Date.parse(value.time));
+
+            let datePinupFpmStart = new Date(datum - 30000).toISOString();
+            let datePinupFpmEnd = new Date(datum + 30000).toISOString();
+            const query = `https://prom-telia.egamings.com/api/v1/query_range?query=php_fpm_idle_processes{app="funcore_prod_pinup", instance="site1-telia-app-2"}&start=${datePinupFpmStart}&end=${datePinupFpmEnd}&step=61s`;
+
+            fetch(query).then((response) => {
+                return response.json();
+            }).then((data) => {
+                let element = data.data.result[0].values[0][1];
+                value.pinup = element;
+            }).catch((e) => {
+                console.log("Something went wrong. Use console.dir to look for result of request", `Error: ${e}`);
+            });
+        });
     }
 }
 
 const render ={
     renderTable: function () {
+        console.log(parseIncidents.incidents)
         parseIncidents.incidents.forEach(value => {
             let tr = document.createElement("tr");
+            console.log(value);
             tr.innerHTML =
                 '<td>' + new Date(value.time).toLocaleString("ru") + '</td>' +
                 '<td>' + value.host + '</td>' +
                 '<td>' + value.resp_time.toFixed(3) + '</td>' +
-                '<td>' + value.pinup.toString() + '</td>';
+                '<td>' + value.pinup + '</td>';
             incidentsTable.append(tr);
         })
     },
@@ -166,11 +192,9 @@ const incident ={
 
     start: function (node = 'all') {
         parseIncidents.nodeIncidents(node);
-        render.renderTable();
     },
 }
 /*
-TODO Добавить текстовый инпут на страницу, передавать его в цикл перебора значений в dataArray как сравнение с resp_time,
 TODO получить данные из прометиуса по пинапу и править флаг "pinup"
  */
 incident.init();

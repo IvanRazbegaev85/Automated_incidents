@@ -1,49 +1,237 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
+    <base target="_top">
     <meta charset="UTF-8">
     <meta name="viewport"
           content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Автоматическое получение списка инцидентов</title>
-    <script defer src = "./script.js"></script>
-    <link rel="stylesheet" type="text/css" href="./scss.css">
+    <script defer>
+        let incidentTime = 0.15;
+        let pinupIdleProcessesThreshold = 400;
+        const now = new Date();
+        let dateFrom = document.querySelector('#datetime-start');
+        let dateTo = document.querySelector('#datetime-end');
+        let influxQueryNode = '';
+        let url = "https://influxapi.egamings.com/query?q=";
+
+        const getDateTimeChosen = function () {
+
+            dateFrom = document.querySelector('#datetime-start');
+            dateTo = document.querySelector('#datetime-end');
+
+            if (Date.parse(`${dateTo.value}:00Z`) < Date.parse(`${dateFrom.value}:00Z`)){
+                alert(`Date-time in "From" field can't be more that in "To" field!`);
+                return false;
+            };
+            const queryDateFrom = `${new Date(Date.parse(`${dateFrom.value}:00Z`) - 10800000).toISOString().slice(0, -5)}Z`;
+            const queryDateTo = `${new Date(Date.parse(`${dateTo.value}:00Z`) - 10800000).toISOString().slice(0, -5)}Z`;
+
+            return {queryDateFrom,queryDateTo}
+        }
+
+        const getInfluxShit = async function (node = 'all'){
+
+            let result;
+
+            switch(true){
+                case node === 1:
+                    result = await fetchForData(1);
+                    break;
+                case node === 2:
+                    result = await fetchForData(2);
+                    break;
+                case node === 3:
+                    result = await fetchForData(3);
+                    break;
+                default:
+                    result = await fetchForData();
+                    break;
+            };
+
+            return result;
+
+        };
+
+        const getPrometheusShit = async function(time){
+            let timeToPrometheus = (Date.parse(time));
+
+            let dateToFetchStart = new Date(timeToPrometheus - 30000).toISOString();
+            let dateToFetchEnd = new Date(timeToPrometheus + 30000).toISOString();
+
+            const query = `https://prom-telia.egamings.com/api/v1/query_range?query=php_fpm_idle_processes{app="funcore_prod_pinup", instance="site1-telia-app-2"}&start=${dateToFetchStart}&end=${dateToFetchEnd}&step=61s`;
+
+            let getData = fetch(query);
+            let promResult = (await getData).json()
+
+            return promResult;
+        };
+
+        const fetchForData = async function (node = 'all') {
+            let date = getDateTimeChosen();
+            let mr_req_time_in_system;
+            let influxQuery;
+            let query;
+            let responseJson = [];
+
+            let queryData = {
+                nodeHost: ['site2-deac-loggingdb1-4','site2-deac-loggingdb2-4','site1-telia-loggingdb3-4'],
+                nodeReqTimeField: ['mr_req_time_in_system', 'mr_req_time_in_system2', 'mr_req_time_in_system3' ]
+            }
+
+            switch(true){
+                case node === 1:
+                    influxQueryNode = queryData.nodeHost[0];
+                    mr_req_time_in_system = queryData.nodeReqTimeField[0];;
+                    break;
+                case node === 2:
+                    influxQueryNode = queryData.nodeHost[1];
+                    mr_req_time_in_system = queryData.nodeReqTimeField[1];
+                    break;
+                case node === 3:
+                    influxQueryNode = queryData.nodeHost[2];
+                    mr_req_time_in_system = queryData.nodeReqTimeField[2];
+                    break;
+            };
+
+            if(node != 'all'){
+                influxQuery =`SELECT host, last(${mr_req_time_in_system}) FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='${influxQueryNode}' AND  time >= '${date.queryDateFrom}' AND time < '${date.queryDateTo}' GROUP BY (time(60s))`;
+                query = `${url}${influxQuery}`;
+            } else {
+                query = `${url}`
+                for (let i = 0; i < queryData.nodeReqTimeField.length; i++){
+                    influxQuery =`SELECT host, last(${queryData.nodeReqTimeField[i]}) FROM "telegraf". "autogen"."grafana_mr_requests" WHERE host='${queryData.nodeHost[i]}' AND  time >= '${date.queryDateFrom}' AND time < '${date.queryDateTo}' GROUP BY (time(60s))`;
+                    query += `${influxQuery}%3B`
+                }
+            }
+
+            let getData = await fetch(query);
+            let response = await getData.json();
+            if(response.results.length>1){
+                responseJson = [].concat(response.results[0].series[0].values, response.results[1].series[0].values, response.results[2].series[0].values);
+            } else {
+                responseJson = response.results[0].series[0].values;
+            }
+            return responseJson;
+        };
+
+        const  creatingIncidentsArray = async (array) => {
+            let result = {};
+            let node = '';
+            let itWasPinup = ''
+            if (array[1] === 'site2-deac-loggingdb1-4') {
+                node = "1ая нода"
+            } else if (array[1] === 'site2-deac-loggingdb2-4') {
+                    node = "2ая нода";
+            } else {
+                node = "3яя нода"
+            }
+            let pinup = await getPrometheusShit(array[0])
+            if(pinup.data.result[0].values[0][1] < pinupIdleProcessesThreshold){
+                itWasPinup = 'Это был Пинап!'
+            }
+            result = {
+                timeStart: Date.parse(array[0]) - 60000,
+                timeEnd: Date.parse(array[0]) + 60000,
+                host: node,
+                pinup: itWasPinup,
+                netto: array[2].toFixed(3)
+            }
+            return result;
+
+        }
+
+        const getIncidents = async function (responseJson) {
+            let incidentsArrayWithPinup = [];
+            let result;
+
+            for (let i = 0; i < responseJson.length; i++) {
+                if (responseJson[i][2] > incidentTime){
+                    let tempObject = await creatingIncidentsArray(responseJson[i]);
+                    incidentsArrayWithPinup.push(tempObject);
+                }
+            }
+            result = checkForLongIncidents(incidentsArrayWithPinup);
+
+            return result;
+        };
+
+        const checkForLongIncidents = function (array){
+
+            let result = [];
+            for (let i =0; i <array.length; i++){
+                if(array[i-1]){
+                    if((array[i].timeStart - array[i-1].timeEnd) < 1 * 60 * 1000){
+                        let maxNetto = Math.max(array[i-1].netto, array[i].netto );
+
+                        result.push({timeStart: array[i-1].timeStart, timeEnd:array[i].timeEnd, host_resp_time: `${array[i].host} ${maxNetto} ms`, pinup: array[i].pinup })
+                        result.splice(i-1,1);
+                    } else {
+                        result.push({timeStart: array[i].timeStart, timeEnd:array[i].timeEnd, host_resp_time: `${array[i].host} ${array[i].netto} ms`, pinup: array[i].pinup })
+                    }
+                } else {
+                    result.push({timeStart: array[i].timeStart, timeEnd:array[i].timeEnd, host_resp_time: `${array[i].host} ${array[i].netto} ms`, pinup: array[i].pinup })
+                }
+            }
+            return result;
+        };
+
+        const parseIncidents = function (incidentsArray) {
+            let resultArray = [];
+            resultArray = incidentsArray.map(value => {
+                return [new Date(value.timeStart + 3 * 60 * 60 * 1000).toISOString().slice(0,-8), new Date(value.timeEnd + 3 * 60 * 60 * 1000).toISOString().slice(0,-8),'=TEXT(INDIRECT("R[0]C[-1]";FALSE)-INDIRECT("R[0]C[-2]";FALSE);"hh:mm:ss")',
+                    value.host_resp_time, value.pinup]
+            });
+            return resultArray;
+        };
+
+        const main = async function (node = 'all') {
+            let responseJson = await getInfluxShit(node);
+            let result = await getIncidents(responseJson);
+            let parsedIncidentArray = parseIncidents(result)
+            return parsedIncidentArray;
+
+        }
+        const writeData = async function (node = 'all') {
+            let result = await main(node);
+            console.log(result);
+            // google.script.run.writeIncedents(result);
+        }
+
+        window.onload = () => {
+            let threshold = document.querySelector('#threshold');
+            let pinupThreshold = document.querySelector('#pinup-threshold');
+            dateFrom = document.querySelector('#datetime-start');
+            dateTo = document.querySelector('#datetime-end');
+
+            threshold.textContent = `${(incidentTime) * 1000} ms`;
+            pinupThreshold.textContent = `${pinupIdleProcessesThreshold}`
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            dateTo.value = now.toISOString().slice(0, -8);
+            now.setDate(now.getDate() - 1);
+            dateFrom.value = now.toISOString().slice(0, -8);
+
+        }
+
+    </script>
 </head>
 <body>
-<form>
-    <label for="response_time">Enter the incident threshold</label><br>
-    <input type="text" id="response_time" value="150"><simple> milliseconds</simple>
-</form>
-<br>
-<form>
-    <label for="date-time-start">Search for incidents from:</label><br>
-    <input type="datetime-local" id="date-time-start"> <br>
-    <label for="date-time-end">to:</label><br>
-    <input type="datetime-local" id="date-time-end">
-</form>
-<!--TODO: Вставить блоком инпут для ввода времени ответа, добавить в него default value + placeholder -->
-<!--TODO: Вставить блоком дата пикер, добавить в него default value - последние сутки -->
-<br>
-<div class="dropdown">
-    <button class="dropbtn">Get those incidents here!</button>
-    <div class="dropdown-content">
-        <a href="#" id="node-one">First node</a>
-        <a href="#" id="node-two">Second node</a>
-        <a href="#" id="node-three">Third node</a>
-        <a href="#" id="all-nodes">All nodes</a>
-    </div>
-</div>
-<div class="dropdown">
-    <button class="dropbtn" id="cancelbtn">Reset those incidents!</button>
-</div>
-<h1>Get all those incidents here!</h1>
-<table id="customers">
-    <tr>
-        <th>Time</th>
-        <th>Host</th>
-        <th>Netto processing time</th>
-        <th>Was it Pinup?</th>
-    </tr>
-</table>
+<label for="threshold">Incidents threshold:</label><br>
+<p id="threshold"></p><br>
+<label for="pinup-threshold">Pinup idle fpm processes threshold:</label><br>
+<p id="pinup-threshold"></p><br>
+<label for="datetime-start">Incidents from:</label><br>
+<input type="datetime-local" id="datetime-start"><br>
+<label for="datetime-end">to:</label>
+</br>
+<input type="datetime-local" id="datetime-end"></br>
+</br>
+<button onclick="writeData(1)" >Первая нода</button></br>
+</br>
+<button onclick="writeData(2)" >Вторая нода</button></br>
+</br>
+<button onclick="writeData(3)" >Третья нода</button></br>
+</br>
+<button onclick="writeData()">Все ноды</button></br>
 </body>
 </html>
