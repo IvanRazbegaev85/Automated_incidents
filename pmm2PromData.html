@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <base target="_top">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <style>
+        /*.spinner {*/
+        /*    margin: 100px auto 0;*/
+        /*    width: 70px;*/
+        /*    text-align: center;*/
+        /*}*/
+
+        #indicator {
+            position: relative;
+            width: 20px;
+            height: 20px;
+            background-color: white;
+        }
+        .dot {
+            position: absolute;
+            height: 25px;
+            width: 25px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .spinner > div {
+            width: 18px;
+            height: 18px;
+            background-color: cornflowerblue;
+
+            border-radius: 100%;
+            display: inline-block;
+            -webkit-animation: sk-bouncedelay 1.4s infinite ease-in-out both;
+            animation: sk-bouncedelay 1.4s infinite ease-in-out both;
+        }
+
+        .spinner .bounce1 {
+            -webkit-animation-delay: -0.32s;
+            animation-delay: -0.32s;
+        }
+
+        .spinner .bounce2 {
+            -webkit-animation-delay: -0.16s;
+            animation-delay: -0.16s;
+        }
+
+        @-webkit-keyframes sk-bouncedelay {
+            0%, 80%, 100% { -webkit-transform: scale(0) }
+            40% { -webkit-transform: scale(1.0) }
+        }
+
+        @keyframes sk-bouncedelay {
+            0%, 80%, 100% {
+                -webkit-transform: scale(0);
+                transform: scale(0);
+            } 40% {
+                  -webkit-transform: scale(1.0);
+                  transform: scale(1.0);
+              }
+        }
+
+    </style>
+    <script defer>
+        const loadText = 'Идет получение и обработка данных PMM2... Подождите';
+        const successText = 'Обработка завершена!'
+
+        let dateFrom, dateTo;
+
+        const getDateTimeChosen = function () {
+
+            dateFrom = document.querySelector('#datetime-start');
+            dateTo = document.querySelector('#datetime-end');
+
+            if (Date.parse(`${dateTo.value}:00Z`) < Date.parse(`${dateFrom.value}:00Z`)){
+                alert(`Date-time in "From" field can't be more that in "To" field!`);
+                return false;
+            };
+            const queryDateFrom = `${new Date(Date.parse(`${dateFrom.value}:00Z`) - 3 * 60 * 60 * 1000).toISOString().slice(0, -5)}Z`;
+            const queryDateTo = `${new Date(Date.parse(`${dateTo.value}:00Z`) - 3 * 60 * 60 * 1000).toISOString().slice(0, -5)}Z`;
+
+            return {queryDateFrom,queryDateTo}
+        }
+
+        const getPrometheusShit = async () => {
+            const date = getDateTimeChosen();
+            const query = `https://pmm2.egamings.com/prometheus/api/v1/query_range?query={__name__=~"mysql_global_status_threads_.*",service_name="site1-telia-loggingdb1-3-mysql"}&start=${date.queryDateFrom}&end=${date.queryDateTo}&step=4`;
+
+            return await fetch(query, {
+                headers: {
+                    "Authorization": "Basic Ym90X2Rhc2hib2FyZDplZVk3dGhhaCZpd2Vla29vY2hlZW1v",
+                }
+            }).then(response => response.json());
+        }
+        const loadingSpinner = (state, bouncers = 3) => {
+            const loader = document.querySelector('.loader');
+            const spinner = document.createElement('div');
+
+            if (state === 'start') {
+                for (let i = 1; i <= bouncers;i++){
+                    const bounce = document.createElement('div');
+                    bounce.classList.add(`bounce${i}`);
+                    spinner.append(bounce)
+                }
+                spinner.classList.add('spinner')
+                loader.textContent = loadText;
+                loader.insertAdjacentElement('beforeend',spinner)
+            } else if (state === 'stop'){
+                const spinnerElem = document.querySelector('.spinner');
+                loader.textContent = successText;
+                spinnerElem.remove()
+                setTimeout(() => {
+                    loader.textContent = '';
+                }, 3000)
+            }
+
+        }
+
+        const indicator = () => {
+            const div = document.createElement('div');
+            idCleanUp('indicator');
+            div.id = 'indicator';
+            div.classList.add('dot')
+            document.body.append(div);
+        }
+
+        const responseArrayParse = async () => {
+            let response = await getPrometheusShit();
+            console.log(response)
+            for (let i = 0; i < response.data.result.length;){
+                if (!response.data.result[i].metric.__name__.includes('running')){
+                    if(!response.data.result[i].metric.__name__.includes('connected')){
+                        response.data.result.splice(i,1);
+                    } else {
+                        break
+                    }
+                } else {
+                    i++
+                }
+            }
+
+            return response.data.result;
+        }
+
+        const loggingdbCheck = async () => {
+
+            idCleanUp('indicator', 'url', 'result')
+            loadingSpinner('start',4);
+            indicator();
+
+            const parsedArray = await responseArrayParse();
+            const threadsRunning =[];
+            const threadsConnected = [];
+
+            let spikesThreadRun, spikesThreadConnect;
+            let result = 'Это не loggingDB1-3';
+            let indicatorElem = document.querySelector('#indicator')
+
+            indicatorElem.style.backgroundColor = 'green';
+
+            for (let i = 0; i < parsedArray.length; i++){
+                if (parsedArray[i].metric.__name__.includes('running')){
+                    parsedArray[i].values.forEach(value => {
+                        threadsRunning.push(value);
+                    })
+                } else {
+                    parsedArray[i].values.forEach(value => {
+                        threadsConnected.push(value);
+                    })
+                }
+            }
+
+            const spikeDetector = (array) => {
+              const applicableDiff = 100;
+              let result = []
+              for (let i = 0; i < array.length; i++){
+                  if (array[i + 1] !== undefined){
+                      if ((+array[i][1] + applicableDiff) < +array[i + 1][1] ){
+                          result.push(array[i + 1])
+                      }
+                  } else break
+
+              }
+              return result;
+            }
+
+            const compareArrays = (threadsRunning, threadsConnected) => {
+              for (let i = 0; i< threadsConnected.length; i++ ){
+                  for (let j = 0; j < threadsRunning.length; j++){
+                      if (threadsRunning[j][0] === threadsConnected[i][0]){
+                          result = 'Это был loggingDB1-3!'
+                          showResult(
+                              result,
+                              threadsRunning[j][0],
+                              `https://pmm2.egamings.com/graph/d/mysql-instance-summary/mysql-instance-summary?orgId=1&`,
+                              '&var-node_name=site1-telia-loggingdb1-3&var-crop_host=site1-telia-l&var-service_name=site1-telia-loggingdb1-3-mysql&');
+                          indicatorElem.style.backgroundColor = 'red'
+                      }
+                  }
+              }
+              if (document.querySelectorAll('#result')) {
+                  const loader = document.querySelector('.loader');
+                  createResultDiv(loader, result);
+              }
+            }
+
+            spikesThreadRun = spikeDetector(threadsRunning);
+            spikesThreadConnect = spikeDetector(threadsConnected)
+
+            compareArrays(spikesThreadRun, spikesThreadConnect);
+
+            loadingSpinner('stop')
+            console.log(result);
+
+        }
+
+        const showResult = (result, time, url, host) => {
+            const loader = document.querySelector('.loader');
+            for (let i = 0; i < 2; i++){
+                if (i === 0){
+                    const button = document.createElement('button');
+                    const timeRange = `from=${(time * 1000) - 2 * 60 * 1000}&to=${(time * 1000) + 2 * 60 * 1000}`;
+                    idCleanUp('url');
+                    button.id = 'url';
+                    button.addEventListener('click',(e) => {
+                        e.preventDefault();
+                        window.open(url + host + timeRange);
+                    })
+                    button.textContent = 'Ссылка на pmm2'
+                    loader.insertAdjacentElement('afterend', button);
+                } else if (i === 1){
+                    createResultDiv(loader, result)
+                }
+            }
+
+        }
+
+        const idCleanUp = (...formID) => {
+
+            formID.forEach(value => {
+                const formExisted = document.getElementById(value);
+
+                if (formExisted){
+                    formExisted.remove()
+                }
+            })
+
+        }
+
+        const createResultDiv = (formToAppend, text) => {
+            {
+                const div = document.createElement('div');
+
+                idCleanUp('result');
+                div.textContent = text;
+                div.id = 'result';
+                formToAppend.insertAdjacentElement('afterend',div)
+            }
+        }
+
+        window.onload = () => {
+            const now = new Date();
+
+            dateFrom = document.querySelector('#datetime-start');
+            dateTo = document.querySelector('#datetime-end');
+
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            dateTo.value = now.toISOString().slice(0, -8);
+            now.setMinutes(now.getMinutes() - 10);
+            dateFrom.value = now.toISOString().slice(0, -8);
+
+        }
+    </script>
+</head>
+<body>
+
+<label for="datetime-start">Incidents from:</label><br>
+<input type="datetime-local" id="datetime-start"><br>
+<label for="datetime-end">to:</label>
+</br>
+<input type="datetime-local" id="datetime-end"></br>
+</br>
+<button id="loggingDB" onclick="loggingdbCheck()">Check if it was loggingDB1-3</button>
+<div class="loader">
+</div>
+</body>
+</html>

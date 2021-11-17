@@ -1,19 +1,67 @@
 <!DOCTYPE html>
 <html>
 <head>
+
     <base target="_top">
     <meta charset="UTF-8">
     <meta name="viewport"
           content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <style>
+        /*.spinner {*/
+        /*    margin: 100px auto 0;*/
+        /*    width: 70px;*/
+        /*    text-align: center;*/
+        /*}*/
+
+        .spinner > div {
+            width: 18px;
+            height: 18px;
+            background-color: cornflowerblue;
+
+            border-radius: 100%;
+            display: inline-block;
+            -webkit-animation: sk-bouncedelay 1.4s infinite ease-in-out both;
+            animation: sk-bouncedelay 1.4s infinite ease-in-out both;
+        }
+
+        .spinner .bounce1 {
+            -webkit-animation-delay: -0.32s;
+            animation-delay: -0.32s;
+        }
+
+        .spinner .bounce2 {
+            -webkit-animation-delay: -0.16s;
+            animation-delay: -0.16s;
+        }
+
+        @-webkit-keyframes sk-bouncedelay {
+            0%, 80%, 100% { -webkit-transform: scale(0) }
+            40% { -webkit-transform: scale(1.0) }
+        }
+
+        @keyframes sk-bouncedelay {
+            0%, 80%, 100% {
+                -webkit-transform: scale(0);
+                transform: scale(0);
+            } 40% {
+                  -webkit-transform: scale(1.0);
+                  transform: scale(1.0);
+              }
+        }
+    </style>
     <script defer>
-        let incidentTime = 0.15;
-        let pinupIdleProcessesThreshold = 400;
+        const higherIncidentThreshold = 0.15;
+        const lowerIncidentThreshold = 0.03
+        const pinupIdleProcessesThreshold = 400;
+        const url = "https://influxapi.egamings.com/query?q=";
         const now = new Date();
+        const loadText = 'Идет загрузка инцидентов... Подождите';
+        const successText = 'Загрузка завершена!'
+
         let dateFrom = document.querySelector('#datetime-start');
         let dateTo = document.querySelector('#datetime-end');
         let influxQueryNode = '';
-        let url = "https://influxapi.egamings.com/query?q=";
 
         const getDateTimeChosen = function () {
 
@@ -24,8 +72,8 @@
                 alert(`Date-time in "From" field can't be more that in "To" field!`);
                 return false;
             };
-            const queryDateFrom = `${new Date(Date.parse(`${dateFrom.value}:00Z`) - 10800000).toISOString().slice(0, -5)}Z`;
-            const queryDateTo = `${new Date(Date.parse(`${dateTo.value}:00Z`) - 10800000).toISOString().slice(0, -5)}Z`;
+            const queryDateFrom = `${new Date(Date.parse(`${dateFrom.value}:00Z`) - 3 * 60 * 60 * 1000).toISOString().slice(0, -5)}Z`;
+            const queryDateTo = `${new Date(Date.parse(`${dateTo.value}:00Z`) - 3 * 60 * 60 * 1000).toISOString().slice(0, -5)}Z`;
 
             return {queryDateFrom,queryDateTo}
         }
@@ -53,18 +101,35 @@
 
         };
 
-        const getPrometheusShit = async function(time){
-            let timeToPrometheus = (Date.parse(time));
+        const getPrometheusShit = async function(time, appHost){
+            let timeToPrometheus = Date.parse(time);
 
-            let dateToFetchStart = new Date(timeToPrometheus - 30000).toISOString();
-            let dateToFetchEnd = new Date(timeToPrometheus + 30000).toISOString();
+            let dateToFetchStart = new Date(timeToPrometheus - 0.5 * 60 * 1000).toISOString();
+            let dateToFetchEnd = new Date(timeToPrometheus + 0.5 * 60 * 1000).toISOString();
 
-            const query = `https://prom-telia.egamings.com/api/v1/query_range?query=php_fpm_idle_processes{app="funcore_prod_pinup", instance="site1-telia-app-2"}&start=${dateToFetchStart}&end=${dateToFetchEnd}&step=61s`;
+            const query = `https://prom-telia.egamings.com/api/v1/query_range?query=php_fpm_idle_processes{app="funcore_prod_pinup", instance="site1-telia-app-${appHost}"}&start=${dateToFetchStart}&end=${dateToFetchEnd}&step=61s`;
 
             let getData = fetch(query);
-            let promResult = (await getData).json()
+            let promResult = (await getData).json();
 
             return promResult;
+        };
+
+        const getAnnotations = async  function(time) {
+            let timeStart = (Date.parse(time) - 3 * 60 * 1000);
+            let timeEnd = (Date.parse(time) + 3 * 60 * 1000);
+
+            let url = `https://dashboard.egamings.com/`;
+            let query = `api/annotations?from=${timeStart}&to=${timeEnd}&dashboardId=6`;
+            console.log(url+query)
+            let getData = fetch(url+query, {
+                headers: {
+                    'Authorization': 'Basic Ym90X2Rhc2hib2FyZDplZVk3dGhhaCZpd2Vla29vY2hlZW1v'
+                }
+            })
+            let result = (await getData).json();
+
+            return result;
         };
 
         const fetchForData = async function (node = 'all') {
@@ -118,7 +183,9 @@
         const  creatingIncidentsArray = async (array) => {
             let result = {};
             let node = '';
-            let itWasPinup = ''
+            let annotation = '';
+            let fetchForAnnotation = await getAnnotations(array[0]);
+
             if (array[1] === 'site2-deac-loggingdb1-4') {
                 node = "1ая нода"
             } else if (array[1] === 'site2-deac-loggingdb2-4') {
@@ -126,16 +193,30 @@
             } else {
                 node = "3яя нода"
             }
-            let pinup = await getPrometheusShit(array[0])
-            if(pinup.data.result[0].values[0][1] < pinupIdleProcessesThreshold){
-                itWasPinup = 'Это был Пинап!'
+
+            for (let i = 0; i < fetchForAnnotation.length; i ++){
+                if(!fetchForAnnotation[i].alertName){
+                    if (!fetchForAnnotation[i].text.includes('pinup')) {
+                        annotation = fetchForAnnotation[i].text
+                    }
+                }
             }
+            for (let i = 0; i < 3; i++){
+                let pinup = await getPrometheusShit(array[0],i+1);
+                console.log(pinup.data.result[0].values[0][1]);
+                if(pinup.data.result[0].values[0][1] <= pinupIdleProcessesThreshold){
+                    if (annotation == ''){
+                        annotation = 'Это был Пинап!'
+                    }
+                }
+            }
+            console.log(array[2])
             result = {
-                timeStart: Date.parse(array[0]) - 60000,
-                timeEnd: Date.parse(array[0]) + 60000,
+                incidentStart: Date.parse(array[0]) - 60000,
+                incidentEnd: Date.parse(array[0]) + 60000,
                 host: node,
-                pinup: itWasPinup,
-                netto: array[2].toFixed(3)
+                pinup: annotation,
+                netto: (array[2]) ? array[2].toFixed(3) : 'Нет данных'
             }
             return result;
 
@@ -146,7 +227,7 @@
             let result;
 
             for (let i = 0; i < responseJson.length; i++) {
-                if (responseJson[i][2] > incidentTime){
+                if (responseJson[i][2] > higherIncidentThreshold || responseJson[i][2] < lowerIncidentThreshold ){
                     let tempObject = await creatingIncidentsArray(responseJson[i]);
                     incidentsArrayWithPinup.push(tempObject);
                 }
@@ -158,32 +239,71 @@
 
         const checkForLongIncidents = function (array){
 
-            let result = [];
-            for (let i =0; i <array.length; i++){
-                if(array[i-1]){
-                    if((array[i].timeStart - array[i-1].timeEnd) < 1 * 60 * 1000){
-                        let maxNetto = Math.max(array[i-1].netto, array[i].netto );
+            for (let i = 0; i < array.length;){
 
-                        result.push({timeStart: array[i-1].timeStart, timeEnd:array[i].timeEnd, host_resp_time: `${array[i].host} ${maxNetto} ms`, pinup: array[i].pinup })
-                        result.splice(i-1,1);
-                    } else {
-                        result.push({timeStart: array[i].timeStart, timeEnd:array[i].timeEnd, host_resp_time: `${array[i].host} ${array[i].netto} ms`, pinup: array[i].pinup })
-                    }
+                if (array[i+1] === undefined){
+                    break
                 } else {
-                    result.push({timeStart: array[i].timeStart, timeEnd:array[i].timeEnd, host_resp_time: `${array[i].host} ${array[i].netto} ms`, pinup: array[i].pinup })
+                    if(array[i].host === array[i+1].host){
+                        const timeDiff = array[i].incidentEnd - array[i+1].incidentStart;
+                        if(timeDiff <= 1 *60 *1000 && timeDiff >= -1 * 60 * 1000){
+                            let maxNetto = Math.max(array[i].netto, array[i + 1].netto);
+                            let pinup;
+
+                            if (array[i].pinup != ''){
+                                pinup = array[i].pinup
+                            } else {
+                                pinup = array[i + 1].pinup
+                            }
+                            array[i] = {
+                                incidentStart: array[i].incidentStart,
+                                incidentEnd: array[i + 1].incidentEnd,
+                                host: array[i].host,
+                                netto: maxNetto,
+                                pinup
+                            }
+                            array.splice(i+1, 1);
+                        } else {
+                            i++;
+                        }
+                    } else {
+                        i++;
+                    }
                 }
             }
-            return result;
+
+            return array;
         };
 
         const parseIncidents = function (incidentsArray) {
             let resultArray = [];
             resultArray = incidentsArray.map(value => {
-                return [new Date(value.timeStart + 3 * 60 * 60 * 1000).toISOString().slice(0,-8), new Date(value.timeEnd + 3 * 60 * 60 * 1000).toISOString().slice(0,-8),'=TEXT(INDIRECT("R[0]C[-1]";FALSE)-INDIRECT("R[0]C[-2]";FALSE);"hh:mm:ss")',
-                    value.host_resp_time, value.pinup]
+                return [new Date(value.incidentStart + 3 * 60 * 60 * 1000).toISOString().slice(0,-8), new Date(value.incidentEnd + 3 * 60 * 60 * 1000).toISOString().slice(0,-8),'=TEXT(INDIRECT("R[0]C[-1]";FALSE)-INDIRECT("R[0]C[-2]";FALSE);"hh:mm:ss")',
+                    `${value.host} ${value.netto} ms`, value.pinup]
             });
             return resultArray;
         };
+
+        const loadingSpinner = (state, bouncers = 3) => {
+            const loader = document.querySelector('.loader');
+            const spinner = document.createElement('div');
+
+            if (state === 'start') {
+                for (let i = 1; i <= bouncers;i++){
+                    const bounce = document.createElement('div');
+                    bounce.classList.add(`bounce${i}`);
+                    spinner.append(bounce)
+                }
+                spinner.classList.add('spinner')
+                loader.textContent = loadText;
+                loader.insertAdjacentElement('beforeend',spinner)
+            } else if (state === 'stop'){
+                const spinnerElem = document.querySelector('.spinner');
+                loader.textContent = successText;
+                spinnerElem.remove()
+            }
+
+        }
 
         const main = async function (node = 'all') {
             let responseJson = await getInfluxShit(node);
@@ -193,18 +313,23 @@
 
         }
         const writeData = async function (node = 'all') {
+            loadingSpinner('start',4);
             let result = await main(node);
             console.log(result);
             // google.script.run.writeIncedents(result);
+            loadingSpinner('stop');
         }
 
         window.onload = () => {
             let threshold = document.querySelector('#threshold');
             let pinupThreshold = document.querySelector('#pinup-threshold');
+            let lowerThreshold = document.querySelector('#lower-threshold');
+
             dateFrom = document.querySelector('#datetime-start');
             dateTo = document.querySelector('#datetime-end');
 
-            threshold.textContent = `${(incidentTime) * 1000} ms`;
+            threshold.textContent = `${(higherIncidentThreshold) * 1000} ms`;
+            lowerThreshold.textContent = `${(lowerIncidentThreshold) * 1000} ms`;
             pinupThreshold.textContent = `${pinupIdleProcessesThreshold}`
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
             dateTo.value = now.toISOString().slice(0, -8);
@@ -216,10 +341,12 @@
     </script>
 </head>
 <body>
-<label for="threshold">Incidents threshold:</label><br>
-<p id="threshold"></p><br>
+<label for="threshold">Incident threshold:</label><br>
+<div id="threshold"></div><br>
+<label for="lower-threshold">Lower incident threshold:</label><br>
+<div id="lower-threshold"></div><br>
 <label for="pinup-threshold">Pinup idle fpm processes threshold:</label><br>
-<p id="pinup-threshold"></p><br>
+<div id="pinup-threshold"></div><br>
 <label for="datetime-start">Incidents from:</label><br>
 <input type="datetime-local" id="datetime-start"><br>
 <label for="datetime-end">to:</label>
@@ -233,5 +360,7 @@
 <button onclick="writeData(3)" >Третья нода</button></br>
 </br>
 <button onclick="writeData()">Все ноды</button></br>
+<div class="loader">
+</div>
 </body>
 </html>
